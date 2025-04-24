@@ -1,6 +1,4 @@
 
-# type: ignore
-
 def _other_andor(andor):
     return '∧' if andor == '∨' else '∨'
 
@@ -344,64 +342,88 @@ def random_formula_of_depth_at_most(d, atoms):
     return ((φ, '∧', ψ), (φ, '∨', ψ), ('¬', φ))[random.randrange(3)]
 
 
+def run_tests():
+
+    assert is_formula_tautology(parse("((¬ (((¬ P) ∨ Q) ∧ P)) ∨ Q)")) # modus ponens
+    assert is_formula_tautology(parse("((¬ (((¬ P) ∨ Q) ∧ ((¬ Q) ∨ R))) ∨ ((¬ P) ∨ R))")) # hypothetical syllogism
+    assert parse("((P ∧ S) ∧ (Q ∨ (R ∧ T)))") == (('P', '∧', 'S'), '∧', ('Q', '∨', ('R', '∧', 'T')))
+    assert parse("(¬ P)") == ('¬', 'P')
+    assert formula_to_nnf(parse("(¬ (¬ P))")) == 'P'
+    assert formula_to_nnf(parse("(¬ ((¬ P) ∨ (¬ Q))))")) == parse("(P ∧ Q)")
+    assert formula_to_nnf(parse("(¬ (P ∧ (¬ Q)))")) == parse("((¬ P) ∨ Q)")
+    assert nnf_to_nested_sets(parse("((P ∧ Q) ∨ ((R ∨ S) ∧ (T ∧ U)))")) == (_s(_s('P', 'Q'), _s(_s('R', 'S'), 'T', 'U')), -1)
+    assert formula_get_atoms(parse("((P ∧ S) ∧ (Ϙ ∨ (P ∧ T)))")) == _s('P', 'S', 'Ϙ', 'T')
+    assert tuple(get_truth_assignments(3)) == ((False, False, False), (False, False, True), (False, True, False), (False, True, True), (True, False, False), (True, False, True), (True, True, False), (True, True, True))
+    assert tuple(make_tt_for_formula(parse('(¬ (P ∧ (¬ Q)))'), ('P', 'Q'))) == (True, True, False, True)
+    assert tuple(make_tt_for_formula(parse('((¬ P) ∨ Q)'), ('P', 'Q'))) == (True, True, False, True)
+    assert tuple(make_tt_for_formula(parse('(Q ∨ (¬ (P ∨ R)))'), ('P', 'Q', 'R'))) == (True, False, True, True, False, False, True, True)
+    assert jnf_get_atoms(_s(_s('P', ('¬', 'R')), _s('T', ('¬', 'π')))) == _s('P', 'R', 'T', 'π')
+
+    def test_cnf_conversion(formula):
+        atom_ordering = tuple(formula_get_atoms(formula))
+        # print(tuple(make_tt_for_cnf(formula_to_cnf(formula), atom_ordering)))
+        # print(tuple(make_tt_for_formula(formula, atom_ordering)))
+        assert tuple(make_tt_for_cnf(formula_to_cnf(formula), atom_ordering)) == tuple(make_tt_for_formula(formula, atom_ordering))
+
+    test_cnf_conversion(parse("(P ∧ Q)"))
+    test_cnf_conversion(parse("((¬ ((¬ P) ∧ Q)) ∨ ((¬ (R ∨ S)) ∧ (¬ (T ∧ (¬ U)))))"))
+    test_cnf_conversion(parse("(((¬ ((P ∧ (¬ Q)) ∨ (R ∧ S))) ∧ ((T ∨ (¬ U)) ∧ ((¬ V) ∨ ((W ∧ X) ∧ (¬ Y))))) ∨ ((¬ (P ∨ Q)) ∧ ((¬ R) ∨ ((S ∧ (¬ T)) ∧ (U ∨ (¬ (V ∧ W)))))))"))
+    test_cnf_conversion(parse("(((¬ P) ∧ (W ∨ (¬ R))) ∨ ((S ∧ (¬ U)) ∧ ((¬ U) ∨ ((V ∧ W) ∨ ((¬ X) ∧ (Q ∨ (¬ P)))))))"))
+
+    def test_resolution(formula):
+        is_taut = all(make_tt_for_formula(formula, tuple(formula_get_atoms(formula))))
+        assert is_taut == is_formula_tautology(formula)
+        return is_taut
+
+    for i in range(100):
+        test_cnf_conversion(random_formula_of_depth_at_most(3, ('P', 'Q', 'R', 'S', 'T')))
+
+    for i in range(100):
+        test_cnf_conversion(random_formula_of_depth_at_most(6, ('P', 'Q', 'R', 'S', 'T')))
+
+    N = 10000
+    taut_count = 0
+    for i in range(N):
+        was_taut = test_resolution(random_formula_of_depth_at_most(4, ('P', 'Q', 'R')))
+        taut_count += was_taut
+    assert taut_count / N > 0.06 # if there are no tautologies then we're not testing much.
+
+    N = 500
+    taut_count = 0
+    for i in range(N):
+        was_taut = test_resolution(random_formula_of_depth_at_most(5, ('P', 'Q', 'R', 'S', 'T')))
+        taut_count += was_taut
+    assert taut_count / N > 0.03
 
 
-assert is_formula_tautology(parse("((¬ (((¬ P) ∨ Q) ∧ P)) ∨ Q)")) # modus ponens
-assert is_formula_tautology(parse("((¬ (((¬ P) ∨ Q) ∧ ((¬ Q) ∨ R))) ∨ ((¬ P) ∨ R))")) # hypothetical syllogism
-# print(random_formula_of_depth_at_most(5))
-# print_frozen_set(nested_sets_to_jnf(_s(_s(_s('P', 'Q'), 'T'))))
-# print_frozen_set(nested_sets_to_jnf(_s(_s(_s('P', 'Q'), 'R', 'S'))))
-# print_frozen_set(nested_sets_to_jnf(_s(_s(_s('P', 'Q'), _s(_s('R', 'S'), 'T', 'U')))))
 
-assert parse("((P ∧ S) ∧ (Q ∨ (R ∧ T)))") == (('P', '∧', 'S'), '∧', ('Q', '∨', ('R', '∧', 'T')))
-assert parse("(¬ P)") == ('¬', 'P')
-assert formula_to_nnf(parse("(¬ (¬ P))")) == 'P'
-assert formula_to_nnf(parse("(¬ ((¬ P) ∨ (¬ Q))))")) == parse("(P ∧ Q)")
-assert formula_to_nnf(parse("(¬ (P ∧ (¬ Q)))")) == parse("((¬ P) ∨ Q)")
-assert nnf_to_nested_sets(parse("((P ∧ Q) ∨ ((R ∨ S) ∧ (T ∧ U)))")) == (_s(_s('P', 'Q'), _s(_s('R', 'S'), 'T', 'U')), -1)
-assert formula_get_atoms(parse("((P ∧ S) ∧ (Ϙ ∨ (P ∧ T)))")) == _s('P', 'S', 'Ϙ', 'T')
-assert tuple(get_truth_assignments(3)) == ((False, False, False), (False, False, True), (False, True, False), (False, True, True), (True, False, False), (True, False, True), (True, True, False), (True, True, True))
-assert tuple(make_tt_for_formula(parse('(¬ (P ∧ (¬ Q)))'), ('P', 'Q'))) == (True, True, False, True)
-assert tuple(make_tt_for_formula(parse('((¬ P) ∨ Q)'), ('P', 'Q'))) == (True, True, False, True)
-assert tuple(make_tt_for_formula(parse('(Q ∨ (¬ (P ∨ R)))'), ('P', 'Q', 'R'))) == (True, False, True, True, False, False, True, True)
-assert jnf_get_atoms(_s(_s('P', ('¬', 'R')), _s('T', ('¬', 'π')))) == _s('P', 'R', 'T', 'π')
+import sys
+def main():
+    args = sys.argv[1:]
+    to_run_tests = '-t' in args
+    try:
+        formula_file_index = args.index('-f') + 1
+    except ValueError:
+        formula_file_index = None
 
-def test_cnf_conversion(formula):
-    atom_ordering = tuple(formula_get_atoms(formula))
-    # print(tuple(make_tt_for_cnf(formula_to_cnf(formula), atom_ordering)))
-    # print(tuple(make_tt_for_formula(formula, atom_ordering)))
-    assert tuple(make_tt_for_cnf(formula_to_cnf(formula), atom_ordering)) == tuple(make_tt_for_formula(formula, atom_ordering))
+    if not ((1 <= len(args) <= 3)
+            and (not len(args) == 3 or (to_run_tests and formula_file_index != None))
+            and (not len(args) == 2 or (not to_run_tests and formula_file_index != None))
+            and (not len(args) == 1 or (to_run_tests and formula_file_index == None))
+            and (formula_file_index is None or formula_file_index < len(args))):
+        print("Usage: python3 atp.py [-t] [-f <file with formula to check>].")
+        exit(1)
 
-test_cnf_conversion(parse("(P ∧ Q)"))
-test_cnf_conversion(parse("((¬ ((¬ P) ∧ Q)) ∨ ((¬ (R ∨ S)) ∧ (¬ (T ∧ (¬ U)))))"))
-test_cnf_conversion(parse("(((¬ ((P ∧ (¬ Q)) ∨ (R ∧ S))) ∧ ((T ∨ (¬ U)) ∧ ((¬ V) ∨ ((W ∧ X) ∧ (¬ Y))))) ∨ ((¬ (P ∨ Q)) ∧ ((¬ R) ∨ ((S ∧ (¬ T)) ∧ (U ∨ (¬ (V ∧ W)))))))"))
-test_cnf_conversion(parse("(((¬ P) ∧ (W ∨ (¬ R))) ∨ ((S ∧ (¬ U)) ∧ ((¬ U) ∨ ((V ∧ W) ∨ ((¬ X) ∧ (Q ∨ (¬ P)))))))"))
+    if to_run_tests:
+        run_tests()
+        # If we've reached this point then we didn't get an assertion error from the tests.
+        print("Tests passed")
 
-def test_resolution(formula):
-    is_taut = all(make_tt_for_formula(formula, tuple(formula_get_atoms(formula))))
-    assert is_taut == is_formula_tautology(formula)
-    return is_taut
+    if formula_file_index is not None:
+        formula_file_name = args[formula_file_index]
+        with open(formula_file_name) as file:
+            contents = file.read()
+            print("Tautology" if is_formula_tautology(parse(contents)) else "Not a tautology")
 
-for i in range(100):
-    test_cnf_conversion(random_formula_of_depth_at_most(3, ('P', 'Q', 'R', 'S', 'T')))
-
-for i in range(100):
-    test_cnf_conversion(random_formula_of_depth_at_most(6, ('P', 'Q', 'R', 'S', 'T')))
-
-def print_ret(x):
-    print(x)
-    return x
-
-N = 10000
-taut_count = 0
-for i in range(N):
-    was_taut = test_resolution(random_formula_of_depth_at_most(4, ('P', 'Q', 'R')))
-    taut_count += was_taut
-assert taut_count / N > 0.06 # if there are no tautologies then we're not testing much.
-
-N = 500
-taut_count = 0
-for i in range(N):
-    was_taut = test_resolution(random_formula_of_depth_at_most(5, ('P', 'Q', 'R', 'S', 'T')))
-    taut_count += was_taut
-assert taut_count / N > 0.03
+if __name__ == '__main__':
+    main()
