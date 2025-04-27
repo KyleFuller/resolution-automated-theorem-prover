@@ -167,7 +167,13 @@ def nested_sets_to_jnf(nested_sets):
     return ret
 
 def formula_to_cnf(formula):
+    """
+    Takes a formula and returns a cnf nested sets representation equivalent to that formula.
+    """
+
+    # `nested_sets` is equivalent to `formula` under the junction type `junction_type`.
     nested_sets, junction_type = nnf_to_nested_sets(formula_to_nnf(formula))
+    # If `junction_type` is conjunction, then `nested_sets_to_jnf(nested_sets)` is a conjunctive normal form of `formula`.  If `junction_type` is not conjunction, then it is either disjunction or literal.  If `junction_type` is disjunction, then {`nested_sets`} is equivalent under conjunction to `nested_sets` under disjunction, and `nested_sets_to_jnf({nested_sets})` is a conjunctive normal form of `formula`.  Otherwise, `formula` is a literal, {`nested_sets`} is equivalent under conjunction to `formula`, and so `nested_sets_to_jnf({nested_sets}) is a conjunctive normal form of `formula`.
     return nested_sets_to_jnf(nested_sets if junction_type == 1 else _s(nested_sets))
 
 
@@ -185,11 +191,25 @@ def is_cnf_unsatisfiable(cnf_formula):
     """
     Takes a cnf formula as a depth two nested set and, using resolution, returns True if unsatisfiable and False otherwise.
     """
+
+    # We take for granted that if `cnf_formula` is inconsistent, then the empty clause is obtainable through some tree of resolutions.  This was proven in J. A. Robinson's 1965 paper “A Machine-Oriented Logic Based on the Resolution Principle”, accessible at https://dl.acm.org/doi/10.1145/321250.321253.
+
+    # let closure(`cnf_formula`) denote the closure of `cnf_formula` under resolution, and let one_step(`tried`) denote the set of clauses that can be obtained by a single resolution step between some pair of clauses in `tried`.
+
+    # Loop invariants (for the outer while loop:
+    # • one_step(`tried`) ⊆ `to_try_set` ∪ `tried`.
+    # • `to_try_set` = `set(to_try_deque)`.
+    # • `cnf_formula` ⊆ `to_try_set` ∪ `tried`.
+    # • `to_try_set` ∪ `tried` ⊆ closure(`cnf_formula`)
+
+
+    # The loop invariants are trivially satisfied before entering the while loop.
     tried = set()
-    to_try_deque = deque(cnf_formula)
     to_try_set = set(cnf_formula)
+    to_try_deque = deque(cnf_formula)
 
     while len(to_try_deque) > 0:
+        # Assume for induction that the loop invariants hold.
         clause = to_try_deque.popleft()
         to_try_set.remove(clause)
         if len(clause) == 0:
@@ -198,9 +218,19 @@ def is_cnf_unsatisfiable(cnf_formula):
         for other in tried:
             resolved = resolve(clause, other)
             if resolved is not None and resolved not in tried and resolved not in to_try_set:
-                to_try_deque.append(resolved)
                 to_try_set.add(resolved)
-    return False
+                to_try_deque.append(resolved)
+        # TODO: Reason out the following more explicitly.
+        # It is straightforward to see that the loop invariants continue to hold.
+    # By induction, the loop invariants hold if we reach this point.  
+
+    # `to_try_deque` = `to_try_set` = ø.  Since `cnf_formula` ⊆ `to_try_set` ∪ `tried`, we have `cnf_formula` ⊆ `tried`.  However, we also have one_step(`tried`) ⊆ `to_try_set` ∪ `tried` = `tried`, so `tried` is closed under resolution.  We can get more here.  Since `cnf_formula` ⊆ `tried`, we have closure(`cnf_formula`) ⊆ `tried`.  On the other hand, `tried` ⊆ closure(`cnf_formula`), so `tried` = closure(`cnf_formula`).  
+
+    # If `cnf_formula` were unsatisfiable, then by Robinson 1965 we would have ø ∈ closure(`cnf_formula`) = `tried`.  But, we can see from the conditional return in the while loop that ø ∉ `tried`. By contrapositive, `cnf_formula` is satisfiable.
+    
+    return False # not unsatisfiable
+
+    # `is_cnf_unsatisfiable` always terminates because each iteration of the while loop (if True isn't returned) adds a clause into `to_try_set`, each clause added to `to_try_set` is not already in `to_try_set` ∪ `tried`, once a clause is added to `to_try_set` it stays in `to_try_set` ∪ `tried`, we have `to_try_set` ∪ `tried` ⊆ closure(`cnf_formula`), and closure(`cnf_formula`) is finite because every clause in closure(`cnf_formula`) is a set of literals formed from atoms that occur in `cnf_formula`, and there are only finitely many such sets of literals because there are only finitely many `atoms` that occur in `cnf_formula`.  All this means that the while loop can only go for finitely many iterations.
 
 def is_formula_tautology(formula):
     return is_cnf_unsatisfiable(formula_to_cnf(('¬', formula)))
