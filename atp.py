@@ -177,13 +177,20 @@ def formula_to_cnf(formula):
     return nested_sets_to_jnf(nested_sets if junction_type == 1 else _s(nested_sets))
 
 
-def atom_complement(atom):
-    return ('¬', atom) if isinstance(atom, str) else atom[1]
+def literal_complement(literal):
+    """
+    Given an literal (an atom or negated atom), returns the literal that is equivalent to the literal's negation.
+    """
+    return ('¬', literal) if isinstance(literal, str) else literal[1]
 
 def resolve(clause, other):
-    for atom in clause:
-        if atom_complement(atom) in other:
-            return (clause - _s(atom)).union(other - _s(atom_complement(atom)))
+    """
+    Given a clause `clause` and another clause `other`, returns the result of the resolution inference rule applied to the two clauses if resolution is applicable, or None if not.  Resolution is applicable if there is some literal L in `clause` whose complement is in `other`.  The result of resolution would then be a new clause that is the set of literals in `clause` except for L unioned with the set of literals in `other` except for the complement of L.
+    """
+    # It is straightforward to see that this code maps directly to the specification.
+    for literal in clause:
+        if literal_complement(literal) in other:
+            return (clause - _s(literal)).union(other - _s(literal_complement(literal)))
     return None
 
 from collections import deque
@@ -192,15 +199,17 @@ def is_cnf_unsatisfiable(cnf_formula):
     Takes a cnf formula as a depth two nested set and, using resolution, returns True if unsatisfiable and False otherwise.
     """
 
-    # We take for granted that if `cnf_formula` is inconsistent, then the empty clause is obtainable through some tree of resolutions.  This was proven in J. A. Robinson's 1965 paper “A Machine-Oriented Logic Based on the Resolution Principle”, accessible at https://dl.acm.org/doi/10.1145/321250.321253.
+    # We take for granted that if `cnf_formula` is inconsistent, then the empty clause is obtainable through some sequence of resolutions.  This was proven in J. A. Robinson's 1965 paper “A Machine-Oriented Logic Based on the Resolution Principle”, accessible at https://dl.acm.org/doi/10.1145/321250.321253.
 
     # let closure(`cnf_formula`) denote the closure of `cnf_formula` under resolution, and let one_step(`tried`) denote the set of clauses that can be obtained by a single resolution step between some pair of clauses in `tried`.
 
     # Loop invariants (for the outer while loop:
     # • one_step(`tried`) ⊆ `to_try_set` ∪ `tried`.
-    # • `to_try_set` = `set(to_try_deque)`.
+    # • `to_try_set` = `set(to_try_deque)`
+    # • `len(to_try_deque)` = `len(to_try_set)`.
     # • `cnf_formula` ⊆ `to_try_set` ∪ `tried`.
     # • `to_try_set` ∪ `tried` ⊆ closure(`cnf_formula`)
+    # • `tried` = n_steps(`cnf_formula`, while_itr)
 
 
     # The loop invariants are trivially satisfied before entering the while loop.
@@ -209,25 +218,52 @@ def is_cnf_unsatisfiable(cnf_formula):
     to_try_deque = deque(cnf_formula)
 
     while len(to_try_deque) > 0:
-        # Assume for induction that the loop invariants hold.
+        # Assume while loop's invariants for induction.
         clause = to_try_deque.popleft()
         to_try_set.remove(clause)
+        # • `to_try_set′` = `set(to_try_deque′)`
+        # • `len(to_try_deque′)` = `len(to_try_set′)`.
+
         if len(clause) == 0:
             return True
         tried.add(clause)
-        for other in tried:
+        # • `cnf_formula` ⊆ `to_try_set′` ∪ `tried′`.
+        # • `tried′` ∪ `to_try_set′` ⊆ closure(`cnf_formula`)
+        # • `cnf_formula` ⊆ `to_try_set′` ∪ `tried′`.
+        # for_itr := 0
+        # Invariants for for loop:
+        # • one_step(`tried′`) ⊆ `to_try_set′` ∪ `tried′` ∪ {`resolve`(`clause`, other) : other ∈ `tried′`[for_itr:] ∧ `resolve`(`clause`, other) ≠ `None`} where `tried′`[for_itr:] denotes all elements from for_itr and beyond, indexing from 0, in an enumeration of the elements of `tried` that has as a prefix the sequence of elements through which the for loop will eventually end up iterating.
+        # • `to_try_set′` = `set(to_try_deque′)`.
+        # • `len(to_try_deque′)` = `len(to_try_set′)`.
+        # • `to_try_set′` ∪ `tried′` ⊆ closure(`cnf_formula`).
+        # • `cnf_formula` ⊆ `to_try_set′` ∪ `tried′`.
+        # These are currently all satisfied.
+        for other in tried: # `other` ∈ `tried′`
+            # Assume for loop's invariants for induction.
+            # for_itr := for_itr + 1
+            # `clause`, `other` ∈ closure(`cnf_formula`).
             resolved = resolve(clause, other)
+            # `resolved` = `None` or `resolved` ∈ closure(`cnf_formula`).
             if resolved is not None and resolved not in tried and resolved not in to_try_set:
+                # `resolved` ∈ closure(`cnf_formula`).
+                # `resolved` ∉ `tried′` ∪ `to_try_set′`.
                 to_try_set.add(resolved)
                 to_try_deque.append(resolved)
-        # TODO: Reason out the following more explicitly.
-        # It is straightforward to see that the loop invariants continue to hold.
-    # By induction, the loop invariants hold if we reach this point.  
+                # • one_step(`tried′`) ⊆ `to_try_set′′` ∪ `tried′` ∪ {`resolve`(`clause`, other) : other ∈ `tried′`[for_itr′:] ∧ `resolve`(`clause`, other) ≠ `None`}
+                # • `to_try_set′′` = `set(to_try_deque′′)`.
+                # • `len(to_try_deque′′)` = `len(to_try_set′′)`.
+                # • `to_try_set′′` ∪ `tried′` ⊆ closure(`cnf_formula`).
+                # • `cnf_formula` ⊆ `to_try_set′′` ∪ `tried′`.
+            # else:
+                # All for loop invariants are preserved.
+        # All for loop invariants still hold.
+        # Since for_itr′ = `len(tried′)`, we have one_step(`tried′`) ⊆ `to_try_set′′` ∪ `tried′`.
+        # We hence have all our while loop invariants preserved.
 
-    # `to_try_deque` = `to_try_set` = ø.  Since `cnf_formula` ⊆ `to_try_set` ∪ `tried`, we have `cnf_formula` ⊆ `tried`.  However, we also have one_step(`tried`) ⊆ `to_try_set` ∪ `tried` = `tried`, so `tried` is closed under resolution.  We can get more here.  Since `cnf_formula` ⊆ `tried`, we have closure(`cnf_formula`) ⊆ `tried`.  On the other hand, `tried` ⊆ closure(`cnf_formula`), so `tried` = closure(`cnf_formula`).  
+    # We conclude by noting that `set(to_try_deque)` = `to_try_set` = ø.  Since `cnf_formula` ⊆ `to_try_set` ∪ `tried`, we have `cnf_formula` ⊆ `tried`.  However, we also have one_step(`tried`) ⊆ `to_try_set` ∪ `tried` = `tried`, so `tried` is closed under resolution.  We can get more here.  Since `cnf_formula` ⊆ `tried`, we have closure(`cnf_formula`) ⊆ `tried`.  On the other hand, `tried` ⊆ closure(`cnf_formula`), so `tried` = closure(`cnf_formula`).  
 
     # If `cnf_formula` were unsatisfiable, then by Robinson 1965 we would have ø ∈ closure(`cnf_formula`) = `tried`.  But, we can see from the conditional return in the while loop that ø ∉ `tried`. By contrapositive, `cnf_formula` is satisfiable.
-    
+
     return False # not unsatisfiable
 
     # `is_cnf_unsatisfiable` always terminates because each iteration of the while loop (if True isn't returned) adds a clause into `to_try_set`, each clause added to `to_try_set` is not already in `to_try_set` ∪ `tried`, once a clause is added to `to_try_set` it stays in `to_try_set` ∪ `tried`, we have `to_try_set` ∪ `tried` ⊆ closure(`cnf_formula`), and closure(`cnf_formula`) is finite because every clause in closure(`cnf_formula`) is a set of literals formed from atoms that occur in `cnf_formula`, and there are only finitely many such sets of literals because there are only finitely many `atoms` that occur in `cnf_formula`.  All this means that the while loop can only go for finitely many iterations.
