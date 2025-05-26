@@ -1,11 +1,12 @@
 
-def _other_andor(andor):
-    return '∧' if andor == '∨' else '∨'
-
 def formula_to_nnf(formula):
     """
     Takes a formula and returns an equivalent formula in negation normal form (nnf).
     """
+    
+    def _other_andor(andor):
+        return '∧' if andor == '∨' else '∨'
+
     match formula:
         # Every formula is either an atom, conjunction, disjunction, or negation.
         case str():
@@ -14,7 +15,7 @@ def formula_to_nnf(formula):
         case (φ, andor, ψ) if andor in {'∧', '∨'}:
             # Assuming formula_to_nnf works for subformulae, the following is equivalent to the original formula and is in nnf.
             return (formula_to_nnf(φ), andor, formula_to_nnf(ψ))
-        case ('¬', subexp):
+        case ('¬', _):
             match formula:
                 # Every negation is a negated atom, negated conjunction, negated disjunction, or negated negation.
                 case ('¬', str()):
@@ -27,7 +28,7 @@ def formula_to_nnf(formula):
                     # If formula_to_nnf works for the subformula of the subformula then the following is equivalent to the original formula by double negation and is in nnf.
                     return formula_to_nnf(φ)
                 case _:
-                    return False
+                    assert False
         case _:
             assert False
         # Correctness follows by induction on the number of symbols in the formula.
@@ -289,19 +290,31 @@ def _parse(tokens, idx):
             case a:
                 ast.append(a)
 
+
+def ensure_formula(ast):
+    if isinstance(ast, str):
+        return ast
+    match ast:
+        case (φ, andor, ψ) if andor in ('∧', '∨'):
+            return (ensure_formula(φ), andor, ensure_formula(ψ))
+        case ('¬', φ):
+            return ('¬', ensure_formula(φ))
+        case _:
+            assert False
+
 def parse(s):
     """
-    Parses strings to formulae.  Does not check wellformedness yet.
+    Parses strings to formulae if the string is well-formed according to the following syntax, and errors otherwise.
 
     Syntax:
-    Disjunction: (φ ∨ ψ)
-    Conjunction: (φ ∧ ψ)
-    Negation: (¬ φ)
+        Formula ::= Atom | ComplexFormula
+        Atom ::= ⟨string without whitespace or parentheses⟩
+        ComplexFormula ::= '(' '¬' Formula ')' | '(' Formula '∧' Formula ')' | '(' Formula '∨' Formula ')'
     """
     tokens = s.replace('(', ' ( ').replace(')', ' ) ').split()
-    return _parse(tokens, 0)[0]
-
-
+    ast, idx = _parse(tokens, 0)
+    assert idx == len(tokens) - 1
+    return ensure_formula(ast)
 
 def frozen_set_to_str(frozen_set):
     if not isinstance(frozen_set, (frozenset, set)):
@@ -415,7 +428,7 @@ def run_tests():
     assert parse("((P ∧ S) ∧ (Q ∨ (R ∧ T)))") == (('P', '∧', 'S'), '∧', ('Q', '∨', ('R', '∧', 'T')))
     assert parse("(¬ P)") == ('¬', 'P')
     assert formula_to_nnf(parse("(¬ (¬ P))")) == 'P'
-    assert formula_to_nnf(parse("(¬ ((¬ P) ∨ (¬ Q))))")) == parse("(P ∧ Q)")
+    assert formula_to_nnf(parse("(¬ ((¬ P) ∨ (¬ Q)))")) == parse("(P ∧ Q)")
     assert formula_to_nnf(parse("(¬ (P ∧ (¬ Q)))")) == parse("((¬ P) ∨ Q)")
     assert nnf_to_nested_sets(parse("((P ∧ Q) ∨ ((R ∨ S) ∧ (T ∧ U)))")) == (_s(_s('P', 'Q'), _s(_s('R', 'S'), 'T', 'U')), -1)
     assert formula_get_atoms(parse("((P ∧ S) ∧ (Ϙ ∨ (P ∧ T)))")) == _s('P', 'S', 'Ϙ', 'T')
@@ -461,33 +474,29 @@ def run_tests():
         taut_count += was_taut
     assert taut_count / N > 0.03
 
+import argparse
 
-
-import sys
 def main():
-    args = sys.argv[1:]
-    to_run_tests = '-t' in args
-    try:
-        formula_file_index = args.index('-f') + 1
-    except ValueError:
-        formula_file_index = None
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', action='store_true')
+    parser.add_argument('-f')        
 
-    if not ((1 <= len(args) <= 3)
-            and (not len(args) == 3 or (to_run_tests and formula_file_index != None))
-            and (not len(args) == 2 or (not to_run_tests and formula_file_index != None))
-            and (not len(args) == 1 or (to_run_tests and formula_file_index == None))
-            and (formula_file_index is None or formula_file_index < len(args))):
+    try:
+        args = parser.parse_args()
+    except SystemExit:
         print("Usage: python3 atp.py [-t] [-f <file with formula to check>].")
         exit(1)
-
-    if to_run_tests:
+    
+    if not (args.t or args.f):
+        print("Must specify at least -t or -f.")
+        exit(1)
+    
+    if args.t:
         run_tests()
-        # If we've reached this point then we didn't get an assertion error from the tests.
         print("Tests passed")
-
-    if formula_file_index is not None:
-        formula_file_name = args[formula_file_index]
-        with open(formula_file_name) as file:
+        
+    if args.f:
+        with open(args.f) as file:
             contents = file.read()
             print("Tautology" if is_formula_tautology(parse(contents)) else "Not a tautology")
 
